@@ -1,0 +1,232 @@
+# https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/values.yaml
+
+defaultRules:
+  enabled: false
+
+alertmanager:
+  image:
+    tag: v0.24.0
+
+grafana:
+  defaultDashboardsEnabled: false
+  defaultDashboardsTimezone: browser
+  adminPassword: admin
+  # Affinity Rules for Monitoring grafana pods
+  affinity: 
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: purpose
+            operator: In
+            values:
+            - scylla-stack
+  # Tolerations for Monitoring grafana pods
+  tolerations:
+    - key: role
+      operator: Equal
+      value: scylla-generic
+      effect: NoSchedule
+
+  sidecar:
+    dashboards:
+      enabled: true
+      # ConfigMaps with label below will be added to Grafana as dashboards.
+      label: grafana_dashboard
+    datasources:
+      # Disable default datasource, instead create our own below
+      defaultDatasourceEnabled: false
+
+  additionalDataSources:
+  # Scylla Monitoring use hardcoded name for datasource.
+  # Default one is called "Prometheus" where SM requires "prometheus".
+  - name: prometheus
+    type: prometheus
+    url: http://prometheus-operated:9090
+
+  plugins:
+    - grafana-piechart-panel
+    - camptocamp-prometheus-alertmanager-datasource
+    # Disabled because it's not available in grafana repo
+    # - scylla-plugin
+
+  image:
+    tag: 7.3.5
+
+  # This might need to be increased for bigger deployments.
+  resources:
+    limits:
+      cpu: 100m
+      memory: 500Mi
+    requests:
+      cpu: 100m
+      memory: 500Mi
+
+## Deploy node exporter as a daemonset to all Scylla nodes
+nodeExporter:
+  enabled: true
+
+prometheus-node-exporter:
+  # NodeAffinity Rules for prometheus-node-exporter DaemonSet Pods on scylladb-generic & scylladb-nodes Node pools.
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: cloud.google.com/gke-nodepool
+            operator: In
+            values:
+            - scylladb-generic
+            - scylladb-nodes
+  # Tolerations for prometheus-node-exporter DaemonSet Pods on scylladb-generic & scylladb-nodes Node pools.
+  tolerations:
+  - key: role
+    operator: Equal
+    value: scylla-clusters
+    effect: NoSchedule
+  - key: role
+    operator: Equal
+    value: scylla-generic
+    effect: NoSchedule
+
+prometheusOperator:
+  kubeletService:
+    enabled: false
+
+  image:
+    tag: v0.51.2
+
+  # Affinity Rules for prometheusOperator pods
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: cloud.google.com/gke-nodepool
+            operator: In
+            values:
+            - scylladb-generic
+
+  # Tolerations for prometheusOperator pods
+  tolerations:
+    - key: role
+      operator: Equal
+      value: scylla-generic
+      effect: NoSchedule
+
+  ## Namespaces to scope the interaction of the Prometheus Operator and the apiserver (allow list).
+  ## This is mutually exclusive with denyNamespaces. Setting this to an empty object will disable the configuration
+  ##
+  namespaces:
+    releaseNamespace: true
+    additional:
+    - scylla
+    - scylla-manager
+    - scylla-operator
+    - scylla-monitoring
+
+  # This might need to be increased for bigger deployments.
+  resources:
+    limits:
+      cpu: 200m
+      memory: 300Mi
+    requests:
+      cpu: 100m
+      memory: 300Mi
+
+## Deploy a Prometheus instance
+##
+prometheus:
+  prometheusSpec:
+    image:
+      tag: v2.24.0
+    ## Assign custom affinity rules to the prometheus instance
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+              - scylladb-generic
+
+    # Tolerations for prometheusOperator pods
+    tolerations:
+      - key: role
+        operator: Equal
+        value: scylla-generic
+        effect: NoSchedule
+
+    # This might need to be increased for bigger deployments.
+    resources:
+      limits:
+        cpu: 4
+        memory: 8Gi
+      requests:
+        cpu: 1
+        memory: 4Gi
+    # Instruct prometheus operator to search for any ServiceMonitor
+    serviceMonitorSelector: { }
+    # This prevents from adding any Helm label to serviceMonitorSelector if
+    # above is empty.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    # Relabelings needed for Scylla dashboards
+    additionalScrapeConfigs:
+      - job_name: scylla
+        relabel_configs:
+        - source_labels: [ __address__ ]
+          regex: '([^:]+)'
+          target_label: __address__
+          replacement: '${1}:9180'
+        - source_labels: [ __address__ ]
+          regex: '(.*):.+'
+          target_label: instance
+          replacement: '${1}'
+        metric_relabel_configs:
+          - source_labels: [ version ]
+            regex: '(.+)'
+            target_label: CPU
+            replacement: 'cpu'
+          - source_labels: [ version ]
+            regex: '(.+)'
+            target_label: CQL
+            replacement: 'cql'
+          - source_labels: [ version ]
+            regex: '(.+)'
+            target_label: OS
+            replacement: 'os'
+          - source_labels: [ version ]
+            regex: '(.+)'
+            target_label: IO
+            replacement: 'io'
+          - source_labels: [ version ]
+            regex: '(.+)'
+            target_label: Errors
+            replacement: 'errors'
+          - regex: 'help|exported_instance|type'
+            action: labeldrop
+          - source_labels: [ version ]
+            regex: '([0-9]+\.[0-9]+)(\.?[0-9]*).*'
+            replacement: '$1$2'
+            target_label: svr
+
+# Disable monitoring for k8s internals
+kubeApiServer:
+  enabled: false
+kubelet:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+coreDns:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeStateMetrics:
+  enabled: false
+
+

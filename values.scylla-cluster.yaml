@@ -1,0 +1,83 @@
+## Refer below link to see the values supported by Scylla_operator for scylla cluster creation.
+## https://github.com/scylladb/scylla-operator/blob/master/helm/scylla/values.yaml
+
+# Allows to override names used in Scylla k8s objects.
+fullnameOverride: "scylladb-cluster"
+
+# Allows to customize Scylla image (You can change this value to upgrade the Scylla Version, latest available version is 5.0.4 as of 14-Oct-2022.)
+scyllaImage:
+  tag: 4.6.3
+
+# Allows to customize Scylla manager Agent image
+agentImage:
+  tag: 3.0.0
+
+# Whether developer mode should be enabled.
+developerMode: true
+
+# cpuset determines if the cluster will use cpu-pinning for max performance.
+cpuset: true
+
+# Whether Scylla Operator should perform automatic cleanup of orphaned Pods.
+automaticOrphanedNodeCleanup: false
+
+# Scylla Manager Backups task definition ( For customization options of Backup/Repair refer to  "https://operator.docs.scylladb.com/master/scylla_cluster_crd.html#settings-explanation"
+
+#backups:
+#- dc: ['us-west1']
+#  name: scylladb-cluster-backup
+#  interval: 4h
+#  location: ['gcs:scylla-backup']
+
+# Scylla Manager Repair task definition
+#repairs:
+#- dc: ['europe-west1']
+#  name: chronicle-p-scylla-repair
+#  interval: 7d
+
+# Name of datacenter
+datacenter: us-west1
+
+# List of racks in DC ( 3 Scylla Nodes with 10TB PV )
+racks:
+- name: us-west1-a
+  scyllaConfig: "scylla-config"
+  scyllaAgentConfig: "scylla-agent-config"
+  # To add or remove the number of Scylla nodes, just change the below number accordingly. Make sure there are enough nodes in node-pool in case of increase.
+  members: 2
+  storage:
+    storageClassName: premium-rwo
+    capacity: 20G
+  # Change these resource limit as per your need but keep the limitations by Google in check.
+  resources:
+    limits:
+      cpu: 1
+      memory: 2Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+  placement:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: purpose
+            operator: In
+            values:
+            - scylla-database
+    tolerations:
+      - key: role
+        operator: Equal
+        value: scylla-clusters
+        effect: NoSchedule
+  volumes:
+  - name: coredumpfs
+    hostPath:
+      path: /tmp/coredumps
+  volumeMounts:
+  - mountPath: /tmp/coredumps
+    name: coredumpfs
+
+# Whether to create Prometheus ServiceMonitor
+serviceMonitor:
+  create: false

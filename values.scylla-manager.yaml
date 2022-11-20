@@ -1,0 +1,92 @@
+# Refer below link for Scylla Manager customization values using Helm Chart.
+# https://github.com/scylladb/scylla-operator/blob/master/helm/scylla-manager/values.yaml
+
+# Allows to customize Scylla Manager image
+image:
+  tag: 3.0.0
+
+# Resources allocated to Scylla Manager pods
+resources:
+  limits:
+    cpu: 1
+    memory: 500Mi
+  requests:
+    cpu: 1
+    memory: 500Mi
+
+# Resources allocated to Scylla Manager Controller pods
+controllerResources:
+  limits:
+    cpu: 500m
+    memory: 200Mi
+  requests:
+    cpu: 500m
+    memory: 200Mi
+
+# Node selector for Scylla Manager pod
+nodeSelector:
+  cloud.google.com/gke-nodepool: scylladb-generic
+
+# Tolerations for Scylla Manager pod
+tolerations:
+- key: role
+  operator: Equal
+  value: scylla-generic
+  effect: NoSchedule
+
+# Node selector for Scylla Manager Controller pod
+controllerNodeSelector:
+  cloud.google.com/gke-nodepool: scylladb-generic
+
+# Tolerations for Scylla Manager Controller pod
+controllerTolerations:
+- key: role
+  operator: Equal
+  value: scylla-generic
+  effect: NoSchedule
+
+# Whether to create Prometheus ServiceMonitor
+serviceMonitor:
+  create: true
+
+scylla:
+  # https://github.com/scylladb/scylla-operator/blob/master/helm/scylla/values.yaml
+  developerMode: true
+  scyllaImage:
+    tag: 4.6.3
+  agentImage:
+    tag: 3.0.0
+  datacenter: manager-dc
+  racks:
+  - name: manager-rack
+    scyllaConfig: "scylla-manager-config"
+    scyllaAgentConfig: "scylla-manager-agent-config"
+    members: 1
+    storage:
+      storageClassName: premium-rwo
+      capacity: 100Gi
+    resources:
+      limits:
+        cpu: 1
+        memory: 2Gi
+      requests:
+        cpu: 1
+        memory: 2Gi
+    placement:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: cloud.google.com/gke-nodepool
+              operator: In
+              values:
+              - scylladb-generic
+      tolerations:
+        - key: role
+          operator: Equal
+          value: scylla-generic
+          effect: NoSchedule
+
+# Whether to create Prometheus ServiceMonitor
+serviceMonitor:
+  create: true
